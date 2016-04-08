@@ -1,0 +1,68 @@
+#!/bin/bash
+#
+# this script simplifies and beautifies the output of the youtube-dl
+# package, for my own personal benefit and uses
+#
+# it also requires the expect package, to unbuffer the output of
+# youtube-dl for real-time feedback
+#
+# on next revision, I'm going to encorporate a function to intuitively
+# ID3 tag the downloaded mp3s 
+#
+
+# config
+PLAYLISTS=("http://www.youtube.com/playlist?list=PLc69xk-pOevgMEx6ZsjYgJy1MUwbNT0f_" "http://www.youtube.com/playlist?list=PLc69xk-pOevgWY6CY545nOZX1KOer780z")
+DESTINATION="~/music/YouTube/%(playlist)s/%(title)s.%(ext)s"
+ARCHIVE="~/music/YouTube/.archive"
+
+# criteria of which lines to print, accomplished via awk
+LINES_ALLOWED="/download/ && /Downloading/;/download/ && /100%/;/download/ && /recorded in archive/;/download/ && /Destination: /;/download/ && /Finished downloading playlist/;/ERROR/"
+
+# colors
+RED=$(tput setaf 1)
+GREEN=$(tput setaf 2)
+YELLOW=$(tput setaf 3)
+BLUE=$(tput setaf 4)
+MAGENTA=$(tput setaf 5)
+NC=$(tput sgr0) # No Color
+
+# used in stylizing lines of output
+PRE=$(echo -n '* '; tput bold) # general
+PREX=$(echo -n '! '; tput bold) # errors
+PRED=$(echo -n '↓ '; tput bold) # downloads
+PREHF=$(echo -n '> '; tput bold) # headers and footers
+POST=$(tput sgr0) # reset/clear
+
+# determine the total number of playlists we specified
+length=${#PLAYLISTS[@]}
+
+# cycle through the playlists, downloading each
+for ((i=0;i<$length;i++)); do
+    # unbuffer and begin running youtube-dl, configured to use ffmpeg and
+    # output to mp3 format. also use awk, to only allow specific lines
+    unbuffer -p youtube-dl --prefer-ffmpeg -i -x --audio-format mp3 --audio-quality 0 -o "$DESTINATION" --download-archive "$ARCHIVE" "${PLAYLISTS[$i]}" | unbuffer -p awk "$LINES_ALLOWED" | \
+    while read line
+    do
+        # strip color codes, so as to not conflict with our own
+        # also strip unnecessary line prefixes and what-not
+        line="$(echo $line | sed -r 's/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g;s:\[download\] ::;s/webm/mp3/g;s/m4a/mp3/g')"
+        
+        # start formatting and printing our different types of output
+        if [[ $line == *"Downloading playlist:"* || $line == *"Finished downloading playlist:"* ]]; then
+            # headers/footers (of sorts)
+            echo "${PREHF}${YELLOW}$line${POST}"
+        elif [[ $line == *"ERROR:"* ]]; then
+            # errors
+            echo " ${PREX}${RED}$line${POST}"
+        elif [[ $line == *"recorded in archive"* ]]; then
+            # archive notices
+            echo " ${PREX}${MAGENTA}$line${POST}"
+        elif [[ $line == *"100% of"* ]]; then
+            # download times
+            echo " ${PRED}${GREEN}$line${POST}"
+        else
+            # everything else
+            echo " ${PRE}${BLUE}$line${POST}"
+        fi
+    done
+done
