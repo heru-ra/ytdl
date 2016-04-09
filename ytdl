@@ -7,7 +7,7 @@
 # youtube-dl for real-time feedback
 #
 # on next revision, I'm going to encorporate a function to intuitively
-# ID3 tag the downloaded mp3s 
+# ID3 tag the downloaded mp3s
 #
 
 # config
@@ -16,7 +16,13 @@ DESTINATION="~/music/YouTube/%(playlist)s/%(title)s.%(ext)s"
 ARCHIVE="~/music/YouTube/.archive"
 
 # criteria of which lines to print, accomplished via awk
-LINES_ALLOWED="/download/ && /Downloading/;/download/ && /100%/;/download/ && /recorded in archive/;/download/ && /Destination: /;/download/ && /Finished downloading playlist/;/ERROR/"
+LINES_ALLOWED="/^\[download\]/ && \$2 ~ /Downloading/ && \$3 ~ /video/; \
+               /^\[download\]/ && \$2 ~ /100%/ && \$3 ~ /of/ && \$5 ~ /in/; \
+               /^\[download\]/ && / has already been recorded in archive$/; \
+               /^\[download\]/ && \$2 ~ /Destination:/; \
+               /^\[download\]/ && \$2 ~ /Downloading/ && \$3 ~ /playlist:/; \
+               /^\[download\]/ && \$2 ~ /Finished/ && \$3 ~ /downloading/ && \$4 ~ /playlist:/; \
+               /^ERROR: /"
 
 # colors
 RED=$(tput setaf 1)
@@ -36,28 +42,31 @@ POST=$(tput sgr0) # reset/clear
 # determine the total number of playlists we specified
 length=${#PLAYLISTS[@]}
 
+# sed pattern to strip color codes, as to not interfere with our work
+STRIPPER="s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g"
+
 # cycle through the playlists, downloading each
 for ((i=0;i<$length;i++)); do
     # unbuffer and begin running youtube-dl, configured to use ffmpeg and
-    # output to mp3 format. also use awk, to only allow specific lines
-    unbuffer -p youtube-dl --prefer-ffmpeg -i -x --audio-format mp3 --audio-quality 0 -o "$DESTINATION" --download-archive "$ARCHIVE" "${PLAYLISTS[$i]}" | unbuffer -p awk "$LINES_ALLOWED" | \
+    # output to mp3 format
+    # also strip codes with sed, then use awk to only allow desired lines
+    unbuffer -p youtube-dl --prefer-ffmpeg -i -x --audio-format mp3 --audio-quality 0 -o "$DESTINATION" --download-archive "$ARCHIVE" "${PLAYLISTS[$i]}" | unbuffer -p sed -r "$STRIPPER" | unbuffer -p awk "$LINES_ALLOWED" | \
     while read line
     do
-        # strip color codes, so as to not conflict with our own
-        # also strip unnecessary line prefixes and what-not
-        line="$(echo $line | sed -r 's/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g;s:\[download\] ::;s/webm/mp3/g;s/m4a/mp3/g')"
+        # strip now undesired line prefixes and what-not
+        line="$(echo $line | sed -r 's:\[download\] ::;s/webm/mp3/g;s/m4a/mp3/g')"
         
         # start formatting and printing our different types of output
-        if [[ $line == *"Downloading playlist:"* || $line == *"Finished downloading playlist:"* ]]; then
+        if [[ $line =~ ^Downloading\ playlist\:\ .* || $line =~ ^Finished\ downloading\ playlist\:\ .* ]]; then
             # headers/footers (of sorts)
             echo "${PREHF}${YELLOW}$line${POST}"
-        elif [[ $line == *"ERROR:"* ]]; then
+        elif [[ $line =~ ^ERROR\:\ .* ]]; then
             # errors
             echo " ${PREX}${RED}$line${POST}"
-        elif [[ $line == *"recorded in archive"* ]]; then
+        elif [[ $line =~ .*\ has\ already\ been\ recorded\ in\ archive.$ ]]; then
             # archive notices
             echo " ${PREX}${MAGENTA}$line${POST}"
-        elif [[ $line == *"100% of"* ]]; then
+        elif [[ $line =~ ^100\%\ of\ .* ]]; then
             # download times
             echo " ${PRED}${GREEN}$line${POST}"
         else
