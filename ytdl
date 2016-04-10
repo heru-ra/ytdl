@@ -53,38 +53,38 @@ for ((i=0;i<$LENGTH;i++)); do
     # unbuffer and begin running youtube-dl, configured to use ffmpeg and
     # output to mp3 format
     # also strip codes with sed, then use awk to only allow desired lines
-    unbuffer -p youtube-dl --prefer-ffmpeg --newline -i -x --audio-format mp3 --audio-quality 0 -o "$DESTINATION" --download-archive "$ARCHIVE" "${PLAYLISTS[$i]}" | \
-    unbuffer -p sed -r "$STRIPPER" | \
-    unbuffer -p awk "$LINES_ALLOWED" | \
+    unbuffer -p youtube-dl --prefer-ffmpeg --newline -i -x --audio-format mp3 --audio-quality 0 -o "${DESTINATION}" --download-archive "${ARCHIVE}" "${PLAYLISTS[$i]}" | \
+    unbuffer -p sed -r "${STRIPPER}" | \
+    unbuffer -p awk "${LINES_ALLOWED}" | \
     while read LINE
     do
         # strip now undesired line prefixes and what-not
-        LINE="$(echo $LINE | sed -r 's:\[download\] ::;s/webm/mp3/g;s/m4a/mp3/g')"
+        LINE="$(echo ${LINE} | sed -r 's:\[download\] ::;s/webm/mp3/g;s/m4a/mp3/g')"
         
         # start formatting and printing our different types of output
         if [[ $LINE =~ ^Downloading\ playlist\:\ .* || $LINE =~ ^Finished\ downloading\ playlist\:\ .* ]]; then
             # headers/footers (of sorts)
-            printf '%s' "${PREHF}${YELLOW}$LINE" | unbuffer -p sed "s/$/${POST} >/"
+            printf '%s' "${PREHF}${YELLOW}${LINE}" | unbuffer -p sed "s/$/${POST} >/"
         elif [[ $LINE =~ ^ERROR\:\ .* ]]; then
             # errors
-            printf '%s\n' "  ${PREX}${RED}$LINE${POST}"
+            printf '%s\n' "  ${PREX}${RED}${LINE}${POST}"
         elif [[ $LINE =~ .*\ has\ already\ been\ recorded\ in\ archive.$ ]]; then
             # archive notices
-            printf '%s\n' "  ${PREX}${MAGENTA}$LINE${POST}"
+            printf '%s\n' "  ${PREX}${MAGENTA}${LINE}${POST}"
         elif [[ $LINE =~ ^[0-9]*\.[0-9]*\%\ of\ .* ]]; then
             # download percent progress counter
             # -- doesn't print a new line with each upward tick, but
             # instead clears and reuses same line
             echo -ne "\033[0K\r"
-            printf '%s' "  ${PRED}${GREEN}$LINE${POST}"
+            printf '%s' "  ${PRED}${GREEN}${LINE}${POST}"
         elif [[ $LINE =~ ^100\%\ of\ .* ]]; then
             # completed download time
             # -- does print a new line!
             echo -ne "\033[0K\r"
-            printf '%s\n' "  ${PRED}${GREEN}$LINE${POST}"
+            printf '%s\n' "  ${PRED}${GREEN}${LINE}${POST}"
         else
             # everything else
-            printf '%s\n' "  ${PRE}${BLUE}$LINE${POST}"
+            printf '%s\n' "  ${PRE}${BLUE}${LINE}${POST}"
         fi
     done
 done
