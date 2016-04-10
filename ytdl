@@ -11,13 +11,16 @@
 #
 
 # config
-PLAYLISTS=("http://www.youtube.com/playlist?list=PLc69xk-pOevgMEx6ZsjYgJy1MUwbNT0f_" "http://www.youtube.com/playlist?list=PLc69xk-pOevgWY6CY545nOZX1KOer780z")
+PLAYLISTS=("http://www.youtube.com/playlist?list=PLc69xk-pOevgMEx6ZsjYgJy1MUwbNT0f_" \
+           "http://www.youtube.com/playlist?list=PLc69xk-pOevgWY6CY545nOZX1KOer780z")
+           
 DESTINATION="~/music/YouTube/%(playlist)s/%(title)s.%(ext)s"
 ARCHIVE="~/music/YouTube/.archive"
 
 # criteria of which lines to print, accomplished via awk
 LINES_ALLOWED="/^\[download\]/ && \$2 ~ /Downloading/ && \$3 ~ /video/; \
-               /^\[download\]/ && \$2 ~ /100%/ && \$3 ~ /of/ && \$5 ~ /in/; \
+               /^\[download\]/ && \$2 ~ /[0-9]*\.[0-9]*\%/ && \$3 ~ /of/ && \$5 ~ /at/; \
+               /^\[download\]/ && \$2 ~ /100\%/ && \$3 ~ /of/ && \$5 ~ /in/; \
                /^\[download\]/ && / has already been recorded in archive$/; \
                /^\[download\]/ && \$2 ~ /Destination:/; \
                /^\[download\]/ && \$2 ~ /Downloading/ && \$3 ~ /playlist:/; \
@@ -34,9 +37,9 @@ NC=$(tput sgr0) # No Color
 
 # used in stylizing lines of output
 PRE=$(echo -n '* '; tput bold) # general
-PREX=$(echo -n '! '; tput bold) # errors
+PREX=$(echo -n '! '; tput bold) # errors and exclamations
 PRED=$(echo -n '↓ '; tput bold) # downloads
-PREHF=$(echo -n '> '; tput bold) # headers and footers
+PREHF=$(echo -n '< '; tput bold) # headers and footers
 POST=$(tput sgr0) # reset/clear
 
 # determine the total number of playlists we specified
@@ -50,7 +53,7 @@ for ((i=0;i<$length;i++)); do
     # unbuffer and begin running youtube-dl, configured to use ffmpeg and
     # output to mp3 format
     # also strip codes with sed, then use awk to only allow desired lines
-    unbuffer -p youtube-dl --prefer-ffmpeg -i -x --audio-format mp3 --audio-quality 0 -o "$DESTINATION" --download-archive "$ARCHIVE" "${PLAYLISTS[$i]}" | unbuffer -p sed -r "$STRIPPER" | unbuffer -p awk "$LINES_ALLOWED" | \
+    unbuffer -p youtube-dl --prefer-ffmpeg --newline -i -x --audio-format mp3 --audio-quality 0 -o "$DESTINATION" --download-archive "$ARCHIVE" "${PLAYLISTS[$i]}" | unbuffer -p sed -r "$STRIPPER" | unbuffer -p awk "$LINES_ALLOWED" | \
     while read line
     do
         # strip now undesired line prefixes and what-not
@@ -59,19 +62,27 @@ for ((i=0;i<$length;i++)); do
         # start formatting and printing our different types of output
         if [[ $line =~ ^Downloading\ playlist\:\ .* || $line =~ ^Finished\ downloading\ playlist\:\ .* ]]; then
             # headers/footers (of sorts)
-            echo "${PREHF}${YELLOW}$line${POST}"
+            printf '%s' "${PREHF}${YELLOW}$line" | unbuffer -p sed "s/$/${POST} >/"
         elif [[ $line =~ ^ERROR\:\ .* ]]; then
             # errors
-            echo " ${PREX}${RED}$line${POST}"
+            printf '%s\n' "  ${PREX}${RED}$line${POST}"
         elif [[ $line =~ .*\ has\ already\ been\ recorded\ in\ archive.$ ]]; then
             # archive notices
-            echo " ${PREX}${MAGENTA}$line${POST}"
+            printf '%s\n' "  ${PREX}${MAGENTA}$line${POST}"
+        elif [[ $line =~ ^[0-9]*\.[0-9]*\%\ of\ .* ]]; then
+            # download percent progress counter
+            # -- doesn't print a new line with each upward tick, but
+            # instead clears and reuses same line
+            echo -ne "\033[0K\r"
+            printf '%s' "  ${PRED}${GREEN}$line${POST}"
         elif [[ $line =~ ^100\%\ of\ .* ]]; then
-            # download times
-            echo " ${PRED}${GREEN}$line${POST}"
+            # completed download time
+            # -- does print a new line!
+            echo -ne "\033[0K\r"
+            printf '%s\n' "  ${PRED}${GREEN}$line${POST}"
         else
             # everything else
-            echo " ${PRE}${BLUE}$line${POST}"
+            printf '%s\n' "  ${PRE}${BLUE}$line${POST}"
         fi
     done
 done
