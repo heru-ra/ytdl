@@ -43,46 +43,48 @@ PREHF=$(echo -n '< '; tput bold) # headers and footers
 POST=$(tput sgr0) # reset/clear
 
 # determine the total number of playlists we specified
-length=${#PLAYLISTS[@]}
+LENGTH=${#PLAYLISTS[@]}
 
 # sed pattern to strip color codes, as to not interfere with our work
 STRIPPER="s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g"
 
 # cycle through the playlists, downloading each
-for ((i=0;i<$length;i++)); do
+for ((i=0;i<$LENGTH;i++)); do
     # unbuffer and begin running youtube-dl, configured to use ffmpeg and
     # output to mp3 format
     # also strip codes with sed, then use awk to only allow desired lines
-    unbuffer -p youtube-dl --prefer-ffmpeg --newline -i -x --audio-format mp3 --audio-quality 0 -o "$DESTINATION" --download-archive "$ARCHIVE" "${PLAYLISTS[$i]}" | unbuffer -p sed -r "$STRIPPER" | unbuffer -p awk "$LINES_ALLOWED" | \
-    while read line
+    unbuffer -p youtube-dl --prefer-ffmpeg --newline -i -x --audio-format mp3 --audio-quality 0 -o "$DESTINATION" --download-archive "$ARCHIVE" "${PLAYLISTS[$i]}" | \
+    unbuffer -p sed -r "$STRIPPER" | \
+    unbuffer -p awk "$LINES_ALLOWED" | \
+    while read LINE
     do
         # strip now undesired line prefixes and what-not
-        line="$(echo $line | sed -r 's:\[download\] ::;s/webm/mp3/g;s/m4a/mp3/g')"
+        LINE="$(echo $LINE | sed -r 's:\[download\] ::;s/webm/mp3/g;s/m4a/mp3/g')"
         
         # start formatting and printing our different types of output
-        if [[ $line =~ ^Downloading\ playlist\:\ .* || $line =~ ^Finished\ downloading\ playlist\:\ .* ]]; then
+        if [[ $LINE =~ ^Downloading\ playlist\:\ .* || $LINE =~ ^Finished\ downloading\ playlist\:\ .* ]]; then
             # headers/footers (of sorts)
-            printf '%s' "${PREHF}${YELLOW}$line" | unbuffer -p sed "s/$/${POST} >/"
-        elif [[ $line =~ ^ERROR\:\ .* ]]; then
+            printf '%s' "${PREHF}${YELLOW}$LINE" | unbuffer -p sed "s/$/${POST} >/"
+        elif [[ $LINE =~ ^ERROR\:\ .* ]]; then
             # errors
-            printf '%s\n' "  ${PREX}${RED}$line${POST}"
-        elif [[ $line =~ .*\ has\ already\ been\ recorded\ in\ archive.$ ]]; then
+            printf '%s\n' "  ${PREX}${RED}$LINE${POST}"
+        elif [[ $LINE =~ .*\ has\ already\ been\ recorded\ in\ archive.$ ]]; then
             # archive notices
-            printf '%s\n' "  ${PREX}${MAGENTA}$line${POST}"
-        elif [[ $line =~ ^[0-9]*\.[0-9]*\%\ of\ .* ]]; then
+            printf '%s\n' "  ${PREX}${MAGENTA}$LINE${POST}"
+        elif [[ $LINE =~ ^[0-9]*\.[0-9]*\%\ of\ .* ]]; then
             # download percent progress counter
             # -- doesn't print a new line with each upward tick, but
             # instead clears and reuses same line
             echo -ne "\033[0K\r"
-            printf '%s' "  ${PRED}${GREEN}$line${POST}"
-        elif [[ $line =~ ^100\%\ of\ .* ]]; then
+            printf '%s' "  ${PRED}${GREEN}$LINE${POST}"
+        elif [[ $LINE =~ ^100\%\ of\ .* ]]; then
             # completed download time
             # -- does print a new line!
             echo -ne "\033[0K\r"
-            printf '%s\n' "  ${PRED}${GREEN}$line${POST}"
+            printf '%s\n' "  ${PRED}${GREEN}$LINE${POST}"
         else
             # everything else
-            printf '%s\n' "  ${PRE}${BLUE}$line${POST}"
+            printf '%s\n' "  ${PRE}${BLUE}$LINE${POST}"
         fi
     done
 done
